@@ -9,7 +9,9 @@ class Device(Base):
     __tablename__ = "devices"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String)
     serial_number = Column(String, unique=True, index=True)
+    api_key = Column(String, unique=True, index=True)
     model = Column(String)
     firmware_version = Column(String)
     is_active = Column(Boolean, default=True)

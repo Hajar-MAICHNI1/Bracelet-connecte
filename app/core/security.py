@@ -4,6 +4,7 @@ from jose import jwt
 from passlib.context import CryptContext
 from app.config.settings import settings
 from itsdangerous import URLSafeTimedSerializer
+import secrets
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -27,6 +28,9 @@ def create_access_token(
     to_encode = {"exp": expire, "sub": str(subject)}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+def generate_api_key() -> str:
+    return secrets.token_urlsafe(32)
 
 def generate_verification_token(email: str) -> str:
     serializer = URLSafeTimedSerializer(settings.SECRET_KEY)

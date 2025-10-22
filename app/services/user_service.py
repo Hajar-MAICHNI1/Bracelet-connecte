@@ -9,6 +9,9 @@ class UserService:
     def __init__(self, user_repo):
         self.user_repo = user_repo
 
+    def get(self, db: Session, id: int) -> User | None:
+        return self.user_repo.get(db, id=id)
+
     def create_user(self, db: Session, *, user_in: UserCreate) -> User:
         hashed_password = get_password_hash(user_in.password)
         user_in_db = UserCreate(email=user_in.email, password=hashed_password, name=user_in.name)

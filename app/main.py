@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.routes import auth, users
+from app.api.routes import auth, users, devices, metrics
 
 app = FastAPI(
     title="IoT Backend API",
@@ -9,6 +9,8 @@ app = FastAPI(
 
 app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
 app.include_router(users.router, prefix="/api/v1", tags=["users"])
+app.include_router(devices.router, prefix="/api/v1", tags=["devices"])
+app.include_router(metrics.router, prefix="/api/v1", tags=["metrics"])
 
 @app.get("/")
 def read_root():
