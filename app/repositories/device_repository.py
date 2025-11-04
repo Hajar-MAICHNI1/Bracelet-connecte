@@ -7,6 +7,9 @@ class DeviceRepository(BaseRepository[Device]):
     def get_by_api_key(self, db: Session, *, api_key: str) -> Device | None:
         return db.query(Device).filter(Device.api_key == api_key).first()
 
+    def get_by_serial_number(self, db: Session, *, serial_number: str) -> Device | None:
+        return db.query(Device).filter(Device.serial_number == serial_number).first()
+
     def create(self, db: Session, *, obj_in: DeviceCreate) -> Device:
         db_obj = Device(
             name=obj_in.name,

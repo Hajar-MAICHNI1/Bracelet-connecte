@@ -12,9 +12,6 @@ class MetricBase(BaseModel):
     unit: Optional[str] = None
     sensor_model: Optional[str] = None
     timestamp: datetime
-    x: Optional[float] = None
-    y: Optional[float] = None
-    z: Optional[float] = None
 
 
 # Properties to receive via API on creation

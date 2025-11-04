@@ -5,8 +5,6 @@ class MetricType(str, enum.Enum):
     HEART_RATE = "heart_rate"
     SKIN_TEMPERATURE = "skin_temperature"
     AMBIENT_TEMPERATURE = "ambient_temperature"
-    ACCELERATION = "acceleration"
-    GYROSCOPE = "gyroscope"
 
 class IssueSeverity(str, enum.Enum):
     LOW = "low"

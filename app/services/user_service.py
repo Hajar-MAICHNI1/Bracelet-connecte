@@ -4,15 +4,22 @@ from app.schemas.user import UserCreate
 from app.repositories.user_repository import user_repository
 from app.core.security import get_password_hash, generate_verification_token, verify_verification_token, generate_password_reset_token, verify_password_reset_token
 from datetime import datetime
+from app.core.exceptions import UserNotFoundException, UserAlreadyExistsException
 
 class UserService:
     def __init__(self, user_repo):
         self.user_repo = user_repo
 
     def get(self, db: Session, id: int) -> User | None:
-        return self.user_repo.get(db, id=id)
+        user = self.user_repo.get(db, id=id)
+        if not user:
+            raise UserNotFoundException(user_id=id)
+        return user
 
     def create_user(self, db: Session, *, user_in: UserCreate) -> User:
+        existing_user = self.get_by_email(db, email=user_in.email)
+        if existing_user:
+            raise UserAlreadyExistsException(email=user_in.email)
         hashed_password = get_password_hash(user_in.password)
         user_in_db = UserCreate(email=user_in.email, password=hashed_password, name=user_in.name)
         user = self.user_repo.create(db, obj_in=user_in_db)
