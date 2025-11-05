@@ -17,6 +17,10 @@ class User(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     deleted_at = Column(DateTime, nullable=True)
+    verification_code = Column(String, nullable=True)
+    verification_code_expires_at = Column(DateTime, nullable=True)
+    password_reset_code = Column(String, nullable=True)
+    password_reset_code_expires_at = Column(DateTime, nullable=True)
 
     devices = relationship("Device", back_populates="owner")
     issues = relationship("Issue", back_populates="reporter")

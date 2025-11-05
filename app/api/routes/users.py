@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from app.api import deps
-from app.schemas.user import User, UserCreate, UserUpdate
+from app.schemas.user import User, UserCreate, UserUpdate, UserVerifyEmail, ResetPasswordWithCodeRequest
 from app.services.user_service import user_service
 from pydantic import BaseModel, EmailStr
 from uuid import UUID
@@ -10,10 +10,6 @@ router = APIRouter()
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
 
 @router.post("/users/", response_model=User)
 def create_user(
@@ -88,21 +84,16 @@ def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@router.get("/users/verify-email", response_model=User)
+@router.post("/users/verify-email", response_model=User)
 def verify_email(
     *, 
     db: Session = Depends(deps.get_db), 
-    token: str
+    request: UserVerifyEmail
 ):
     """
-    Verify user email.
+    Verify user email with a 6-digit code.
     """
-    user = user_service.verify_email(db, token=token)
-    if not user:
-        raise HTTPException(
-            status_code=400, 
-            detail="Invalid or expired token"
-        )
+    user = user_service.verify_email_with_code(db, email=request.email, code=request.code)
     return user
 
 @router.post("/users/forgot-password")
@@ -112,28 +103,21 @@ def forgot_password(
     request: ForgotPasswordRequest
 ):
     """
-    Send password reset email.
+    Send password reset code.
     """
-    user = user_service.get_by_email(db, email=request.email)
-    if user:
-        user_service.send_password_reset_email(user)
-    return {"message": "If a user with that email exists, a password reset email has been sent."}
+    user_service.initiate_password_reset(db, email=request.email)
+    return {"message": "If a user with that email exists, a password reset code has been sent."}
 
 @router.post("/users/reset-password", response_model=User)
 def reset_password(
     *, 
     db: Session = Depends(deps.get_db), 
-    request: ResetPasswordRequest
+    request: ResetPasswordWithCodeRequest
 ):
     """
-    Reset user password.
+    Reset user password with a 6-digit code.
     """
-    user = user_service.reset_password(
-        db, token=request.token, new_password=request.new_password
+    user = user_service.reset_password_with_code(
+        db, email=request.email, code=request.code, new_password=request.new_password
     )
-    if not user:
-        raise HTTPException(
-            status_code=400, 
-            detail="Invalid or expired token"
-        )
     return user

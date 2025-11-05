@@ -2,9 +2,9 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from app.repositories.user_repository import user_repository
-from app.core.security import get_password_hash, generate_verification_token, verify_verification_token, generate_password_reset_token, verify_password_reset_token
-from datetime import datetime
-from app.core.exceptions import UserNotFoundException, UserAlreadyExistsException
+from app.core.security import get_password_hash, generate_6_digit_code
+from datetime import datetime, timedelta
+from app.core.exceptions import UserNotFoundException, UserAlreadyExistsException, InvalidCredentialsException
 import smtplib, ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -30,10 +30,18 @@ class UserService:
         existing_user = self.get_by_email(db, email=user_in.email)
         if existing_user:
             raise UserAlreadyExistsException(email=user_in.email)
+        
         hashed_password = get_password_hash(user_in.password)
-        user_in_db = UserCreate(email=user_in.email, password=hashed_password, name=user_in.name)
-        user = self.user_repo.create(db, obj_in=user_in_db)
-        self.send_verification_email(user)
+        verification_code = generate_6_digit_code()
+        
+        user_data = user_in.model_dump()
+        user_data["hashed_password"] = hashed_password
+        user_data["verification_code"] = verification_code
+        user_data["verification_code_expires_at"] = datetime.utcnow() + timedelta(hours=1)
+        del user_data["password"]
+
+        user = self.user_repo.create(db, obj_in=user_data)
+        self.send_verification_email(user, verification_code)
         return user
 
     def update_user(
@@ -60,9 +68,7 @@ class UserService:
     def get_by_email(self, db: Session, *, email: str) -> User | None:
         return self.user_repo.get_by_email(db, email=email)
 
-    def send_verification_email(self, user: User):
-        token = generate_verification_token(user.email)
-        
+    def send_verification_email(self, user: User, verification_code: str):
         message = MIMEMultipart("alternative")
         message["Subject"] = "Verify your email address"
         message["From"] = settings.SMTP_USER
@@ -71,16 +77,14 @@ class UserService:
         text = f"""\
         Hi {user.name},
         Thanks for signing up to our service.
-        Please verify your email address by clicking the link below:
-        http://localhost:8000/api/v1/users/verify-email?token={token}
+        Your verification code is: {verification_code}
         """
         html = f"""\
         <html>
           <body>
             <p>Hi {user.name},<br>
                Thanks for signing up to our service.<br>
-               Please verify your email address by clicking the link below:<br>
-               <a href="http://localhost:8000/api/v1/users/verify-email?token={token}">Verify email</a> 
+               Your verification code is: <b>{verification_code}</b>
             </p>
           </body>
         </html>
@@ -99,23 +103,37 @@ class UserService:
                 settings.SMTP_USER, user.email, message.as_string()
             )
 
-
-    def verify_email(self, db: Session, *, token: str) -> User | None:
-        email = verify_verification_token(token)
-        if not email:
-            return None
+    def verify_email_with_code(self, db: Session, *, email: str, code: str) -> User | None:
         user = self.get_by_email(db, email=email)
-        if not user or user.email_verified_at:
-            return None
+        if (
+            not user
+            or not user.verification_code
+            or user.verification_code != code
+            or user.verification_code_expires_at < datetime.utcnow()
+        ):
+            raise InvalidCredentialsException(detail="Invalid or expired verification code.")
+
         user.email_verified_at = datetime.utcnow()
+        user.verification_code = None
+        user.verification_code_expires_at = None
         db.add(user)
         db.commit()
         db.refresh(user)
         return user
 
-    def send_password_reset_email(self, user: User):
-        token = generate_password_reset_token(user.email)
-        
+    def initiate_password_reset(self, db: Session, *, email: str):
+        user = self.get_by_email(db, email=email)
+        if not user:
+            raise UserNotFoundException()
+
+        password_reset_code = generate_6_digit_code()
+        user.password_reset_code = password_reset_code
+        user.password_reset_code_expires_at = datetime.utcnow() + timedelta(minutes=15)
+        db.add(user)
+        db.commit()
+        self.send_password_reset_email(user, password_reset_code)
+
+    def send_password_reset_email(self, user: User, password_reset_code: str):
         message = MIMEMultipart("alternative")
         message["Subject"] = "Reset your password"
         message["From"] = settings.SMTP_USER
@@ -123,15 +141,13 @@ class UserService:
 
         text = f"""\
         Hi {user.name},
-        Please reset your password by clicking the link below:
-        http://127.0.0.1:8000/api/v1/users/reset-password?token={token}
+        Your password reset code is: {password_reset_code}
         """
         html = f"""\
         <html>
           <body>
             <p>Hi {user.name},<br>
-               Please reset your password by clicking the link below:<br>
-               <a href="http://127.0.0.1:8000/api/v1/users/reset-password?token={token}">Reset password</a> 
+               Your password reset code is: <b>{password_reset_code}</b>
             </p>
           </body>
         </html>
@@ -150,15 +166,19 @@ class UserService:
                 settings.SMTP_USER, user.email, message.as_string()
             )
 
-    def reset_password(self, db: Session, *, token: str, new_password: str) -> User | None:
-        email = verify_password_reset_token(token)
-        if not email:
-            return None
+    def reset_password_with_code(self, db: Session, *, email: str, code: str, new_password: str) -> User:
         user = self.get_by_email(db, email=email)
-        if not user:
-            return None
-        hashed_password = get_password_hash(new_password)
-        user.hashed_password = hashed_password
+        if (
+            not user
+            or not user.password_reset_code
+            or user.password_reset_code != code
+            or user.password_reset_code_expires_at < datetime.utcnow()
+        ):
+            raise InvalidCredentialsException(detail="Invalid or expired password reset code.")
+
+        user.hashed_password = get_password_hash(new_password)
+        user.password_reset_code = None
+        user.password_reset_code_expires_at = None
         db.add(user)
         db.commit()
         db.refresh(user)

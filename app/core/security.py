@@ -5,6 +5,7 @@ from passlib.context import CryptContext
 from app.config.settings import settings
 from itsdangerous import URLSafeTimedSerializer
 import secrets
+import random
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -31,6 +32,10 @@ def create_access_token(
 
 def generate_api_key() -> str:
     return secrets.token_urlsafe(32)
+
+def generate_6_digit_code() -> str:
+    """Generates a random 6-digit code."""
+    return str(random.randint(100000, 999999))
 
 def generate_verification_token(email: str) -> str:
     serializer = URLSafeTimedSerializer(settings.SECRET_KEY)

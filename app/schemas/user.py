@@ -20,6 +20,15 @@ class UserCreate(UserBase):
 class UserUpdate(UserBase):
     password: Optional[str] = None
 
+class UserVerifyEmail(BaseModel):
+    email: EmailStr
+    code: str
+
+class ResetPasswordWithCodeRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
 # Properties shared by models in DB
 class UserInDBBase(UserBase):
     id: uuid.UUID
