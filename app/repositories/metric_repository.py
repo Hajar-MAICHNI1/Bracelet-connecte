@@ -47,4 +47,16 @@ class MetricRepository(BaseRepository[Metric]):
             .all()
         )
 
+    def get_multi(
+        self, db: Session, *, skip: int = 0, limit: int = 100
+    ) -> List[Metric]:
+        return db.query(self.model).offset(skip).limit(limit).all()
+
+    def remove(self, db: Session, *, id: str) -> Metric | None:
+        obj = db.query(self.model).get(id)
+        if obj:
+            db.delete(obj)
+            db.commit()
+        return obj
+
 metric_repository = MetricRepository(Metric)
