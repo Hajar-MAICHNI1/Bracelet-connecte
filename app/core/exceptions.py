@@ -41,3 +41,24 @@ class MetricCreationException(HTTPException):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while creating metrics",
         )
+
+class IssueNotFoundException(HTTPException):
+    def __init__(self, issue_id: int):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Issue with id {issue_id} not found",
+        )
+
+class DeviceNotFoundException(HTTPException):
+    def __init__(self, device_id: int):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device with id {device_id} not found",
+        )
+
+class MetricNotFoundException(HTTPException):
+    def __init__(self, metric_id: int):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Metric with id {metric_id} not found",
+        )

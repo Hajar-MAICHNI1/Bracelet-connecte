@@ -10,3 +10,8 @@ class IssueSeverity(str, enum.Enum):
     LOW = "low"
     MODERATE = "moderate"
     CRITICAL = "critical"
+
+class AggregationPeriod(str, enum.Enum):
+    DAILY = "day"
+    WEEKLY = "week"
+    MONTHLY = "month"

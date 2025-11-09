@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from app.repositories.user_repository import user_repository
+from app.repositories.metric_repository import metric_repository
 from app.core.security import get_password_hash, generate_6_digit_code
 from datetime import datetime, timedelta
 from app.core.exceptions import UserNotFoundException, UserAlreadyExistsException, InvalidCredentialsException
@@ -10,6 +11,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from app.config.settings import settings
 from typing import List, Dict, Any
+from uuid import UUID
+from app.models.enums import AggregationPeriod, MetricType
+from app.models.metric import Metric
 
 class UserService:
     def __init__(self, user_repo):
@@ -183,5 +187,24 @@ class UserService:
         db.commit()
         db.refresh(user)
         return user
+
+    def get_metrics_summary(
+        self, db: Session, *, user_id: UUID, period: AggregationPeriod, metric_type: MetricType
+    ) -> List[Dict[str, Any]]:
+        return metric_repository.get_summary(
+            db,
+            user_id=user_id,
+            period=period.value,
+            metric_type=metric_type,
+        )
+
+    def get_metrics_by_type(
+        self, db: Session, *, user_id: UUID, metric_type: MetricType
+    ) -> List[Metric]:
+        return metric_repository.get_by_user_and_type(
+            db,
+            user_id=user_id,
+            metric_type=metric_type,
+        )
 
 user_service = UserService(user_repository)
