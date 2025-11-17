@@ -1,5 +1,5 @@
 # Use a base image for Python and slim footprint
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -22,4 +22,9 @@ COPY . .
 EXPOSE 8000
 
 # migrate DB and start the application
-CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port 8001"]
+# Copy and make entrypoint executable
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# migrate DB and start the application
+CMD ["/entrypoint.sh", "uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
