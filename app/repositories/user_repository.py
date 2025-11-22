@@ -83,15 +83,22 @@ class UserRepository:
             raise UserNotFoundException(f"email: {email}")
 
         # Check if code matches and hasn't expired
-        if (user.verification_code == verification_code and 
-            user.verification_code_expires_at and 
-            user.verification_code_expires_at > datetime.now(timezone.utc)):
+        current_time = datetime.now(timezone.utc)
+        if (user.verification_code == verification_code and
+            user.verification_code_expires_at):
             
-            user.email_verified_at = datetime.now(timezone.utc)
-            user.verification_code = None
-            user.verification_code_expires_at = None
-            self.db.commit()
-            return True
+            # Handle both naive and aware datetimes
+            expires_at = user.verification_code_expires_at
+            if expires_at.tzinfo is None:
+                # Naive datetime - assume UTC
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            
+            if expires_at > current_time:
+                user.email_verified_at = current_time
+                user.verification_code = None
+                user.verification_code_expires_at = None
+                self.db.commit()
+                return True
         
         return False
 
@@ -135,16 +142,23 @@ class UserRepository:
             raise UserNotFoundException(f"email: {email}")
 
         # Check if reset code matches and hasn't expired
-        if (user.password_reset_code == reset_code and 
-            user.password_reset_code_expires_at and 
-            user.password_reset_code_expires_at > datetime.now()):
+        current_time = datetime.now(timezone.utc)
+        if (user.password_reset_code == reset_code and
+            user.password_reset_code_expires_at):
             
-            user.hashed_password = get_password_hash(new_password)
-            user.password_reset_code = None
-            user.password_reset_code_expires_at = None
-            user.updated_at = datetime.now()
-            self.db.commit()
-            return True
+            # Handle both naive and aware datetimes
+            expires_at = user.password_reset_code_expires_at
+            if expires_at.tzinfo is None:
+                # Naive datetime - assume UTC
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            
+            if expires_at > current_time:
+                user.hashed_password = get_password_hash(new_password)
+                user.password_reset_code = None
+                user.password_reset_code_expires_at = None
+                user.updated_at = current_time
+                self.db.commit()
+                return True
         
         return False
 

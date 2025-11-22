@@ -91,7 +91,7 @@ async def register(
         return {
             "message": "User registered successfully. Please check your email for verification code.",
             "user": UserResponse.from_orm(user),
-            "verification_code": verification_code,  # Remove in production
+            # "verification_code": verification_code,  # Remove in production
             "email_sent": True
         }
     except UserAlreadyExistsException as e:
