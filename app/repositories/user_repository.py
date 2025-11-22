@@ -1,52 +1,172 @@
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 from sqlalchemy.orm import Session
 from app.models.user import User
-from app.schemas.user import UserCreate, UserUpdate
-from app.repositories.base import BaseRepository
-from typing import TypeVar, Generic, List, Dict, Any
-from datetime import datetime
+from app.core.exceptions import UserNotFoundException, UserAlreadyExistsException
+from app.core.security import get_password_hash, generate_6_digit_code
 
-ModelType = TypeVar("ModelType")
 
-class UserRepository(BaseRepository[User]):
-    def get_by_email(self, db: Session, *, email: str) -> User | None:
-        return db.query(User).filter(User.email == email).first()
+class UserRepository:
+    """Repository for user database operations."""
+    
+    def __init__(self, db: Session):
+        self.db = db
 
-    def create(self, db: Session, *, obj_in: Dict[str, Any]) -> User:
-        db_obj = User(**obj_in)
-        db.add(db_obj)
-        db.commit()
-        db.refresh(db_obj)
-        return db_obj
+    def get_user_by_id(self, user_id: str) -> Optional[User]:
+        """Get user by ID."""
+        return self.db.query(User).filter(
+            User.id == user_id,
+            User.deleted_at.is_(None)
+        ).first()
 
-    def get_multi(
-        self, db: Session, *, skip: int = 0, limit: int = 100
-    ) -> List[User]:
-        return db.query(self.model).offset(skip).limit(limit).all()
+    def get_user_by_email(self, email: str) -> Optional[User]:
+        """Get user by email."""
+        return self.db.query(User).filter(
+            User.email == email,
+            User.deleted_at.is_(None)
+        ).first()
 
-    def update(
-        self, db: Session, *, db_obj: User, obj_in: UserUpdate | Dict[str, Any]
-    ) -> User:
-        if isinstance(obj_in, dict):
-            update_data = obj_in
-        else:
-            update_data = obj_in.model_dump(exclude_unset=True)
+    def create_user(self, name: str, email: str, password: str) -> User:
+        """Create a new user with email verification."""
+        # Check if user already exists
+        existing_user = self.get_user_by_email(email)
+        if existing_user:
+            raise UserAlreadyExistsException(email)
+
+        # Generate verification code
+        verification_code = generate_6_digit_code()
+        verification_expires = datetime.now(timezone.utc) + timedelta(hours=24)  # 24 hours expiry
+
+        # Create user
+        user = User(
+            name=name,
+            email=email,
+            hashed_password=get_password_hash(password),
+            verification_code=verification_code,
+            verification_code_expires_at=verification_expires
+        )
         
-        for field in update_data:
-            if hasattr(db_obj, field):
-                setattr(db_obj, field, update_data[field])
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def update_user(self, user_id: str, **kwargs) -> User:
+        """Update user fields."""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise UserNotFoundException(user_id)
+
+        for key, value in kwargs.items():
+            if hasattr(user, key):
+                setattr(user, key, value)
+
+        user.updated_at = datetime.now(timezone.utc)
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def delete_user(self, user_id: str) -> bool:
+        """Soft delete user by setting deleted_at timestamp."""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise UserNotFoundException(user_id)
+
+        user.deleted_at = datetime.now(timezone.utc)
+        self.db.commit()
+        return True
+
+    def verify_email(self, email: str, verification_code: str) -> bool:
+        """Verify user email with verification code."""
+        user = self.get_user_by_email(email)
+        if not user:
+            raise UserNotFoundException(f"email: {email}")
+
+        # Check if code matches and hasn't expired
+        if (user.verification_code == verification_code and 
+            user.verification_code_expires_at and 
+            user.verification_code_expires_at > datetime.now(timezone.utc)):
+            
+            user.email_verified_at = datetime.now(timezone.utc)
+            user.verification_code = None
+            user.verification_code_expires_at = None
+            self.db.commit()
+            return True
         
-        db.add(db_obj)
-        db.commit()
-        db.refresh(db_obj)
-        return db_obj
+        return False
 
-    def remove(self, db: Session, *, id: str) -> User | None:
-        obj = db.query(self.model).get(id)
-        if obj:
-            obj.deleted_at = datetime.utcnow()
-            db.add(obj)
-            db.commit()
-            db.refresh(obj)
-        return obj
+    def resend_verification_code(self, email: str) -> str:
+        """Generate and set new verification code for user."""
+        user = self.get_user_by_email(email)
+        if not user:
+            raise UserNotFoundException(f"email: {email}")
 
-user_repository = UserRepository(User)
+        # Generate new verification code
+        verification_code = generate_6_digit_code()
+        verification_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+
+        user.verification_code = verification_code
+        user.verification_code_expires_at = verification_expires
+        user.updated_at = datetime.now(timezone.utc)
+        
+        self.db.commit()
+        return verification_code
+
+    def set_password_reset_code(self, email: str) -> str:
+        """Set password reset code for user."""
+        user = self.get_user_by_email(email)
+        if not user:
+            raise UserNotFoundException(f"email: {email}")
+
+        reset_code = generate_6_digit_code()
+        reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)  # 1 hour expiry
+
+        user.password_reset_code = reset_code
+        user.password_reset_code_expires_at = reset_expires
+        user.updated_at = datetime.now(timezone.utc)
+        
+        self.db.commit()
+        return reset_code
+
+    def reset_password(self, email: str, reset_code: str, new_password: str) -> bool:
+        """Reset user password using reset code."""
+        user = self.get_user_by_email(email)
+        if not user:
+            raise UserNotFoundException(f"email: {email}")
+
+        # Check if reset code matches and hasn't expired
+        if (user.password_reset_code == reset_code and 
+            user.password_reset_code_expires_at and 
+            user.password_reset_code_expires_at > datetime.now()):
+            
+            user.hashed_password = get_password_hash(new_password)
+            user.password_reset_code = None
+            user.password_reset_code_expires_at = None
+            user.updated_at = datetime.now()
+            self.db.commit()
+            return True
+        
+        return False
+
+    def change_password(self, user_id: str, new_password: str) -> bool:
+        """Change user password directly."""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise UserNotFoundException(user_id)
+
+        user.hashed_password = get_password_hash(new_password)
+        user.updated_at = datetime.now(timezone.utc)
+        self.db.commit()
+        return True
+
+    def get_all_users(self, skip: int = 0, limit: int = 100) -> list[User]:
+        """Get all users with pagination."""
+        return self.db.query(User).filter(
+            User.deleted_at.is_(None)
+        ).offset(skip).limit(limit).all()
+
+    def get_users_count(self) -> int:
+        """Get total count of active users."""
+        return self.db.query(User).filter(
+            User.deleted_at.is_(None)
+        ).count()

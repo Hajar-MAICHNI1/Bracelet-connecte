@@ -5,3 +5,5 @@ __pycache__/
 .idea/
 GEMINI.md
 *.jpg
+*/**/.DS_Store
+logs/

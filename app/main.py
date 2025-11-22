@@ -1,5 +1,7 @@
 from fastapi import FastAPI
-from app.api.routes import auth, users, devices, metrics, summary, issues
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.routes import auth, metrics
 
 app = FastAPI(
     title="IoT Backend API",
@@ -7,12 +9,18 @@ app = FastAPI(
     version="0.1.0",
 )
 
-app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
-app.include_router(users.router, prefix="/api/v1", tags=["users"])
-app.include_router(devices.router, prefix="/api/v1", tags=["devices"])
-app.include_router(metrics.router, prefix="/api/v1", tags=["metrics"])
-app.include_router(summary.router, prefix="/api/v1", tags=["summary"])
-app.include_router(issues.router, prefix="/api/v1", tags=["issues"])
+# Add CORS middleware to allow all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+# Include authentication router
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["metrics"])
 
 @app.get("/")
 def read_root():

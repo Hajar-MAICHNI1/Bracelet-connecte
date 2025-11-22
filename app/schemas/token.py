@@ -1,10 +1,20 @@
 from pydantic import BaseModel
 from typing import Optional
-import uuid
+
 
 class Token(BaseModel):
+    """Token schema for login response."""
     access_token: str
-    token_type: str
+    token_type: str = "bearer"
+
 
 class TokenPayload(BaseModel):
-    sub: Optional[uuid.UUID] = None
+    """JWT payload structure."""
+    sub: Optional[str] = None
+    exp: Optional[int] = None
+
+
+class TokenData(BaseModel):
+    """Token validation data."""
+    user_id: Optional[str] = None
+    email: Optional[str] = None

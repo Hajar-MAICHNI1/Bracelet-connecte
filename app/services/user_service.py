@@ -1,210 +1,226 @@
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 from app.models.user import User
-from app.schemas.user import UserCreate, UserUpdate
-from app.repositories.user_repository import user_repository
-from app.repositories.metric_repository import metric_repository
-from app.core.security import get_password_hash, generate_6_digit_code
-from datetime import datetime, timedelta
-from app.core.exceptions import UserNotFoundException, UserAlreadyExistsException, InvalidCredentialsException
-import smtplib, ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from app.config.settings import settings
-from typing import List, Dict, Any
-from uuid import UUID
-from app.models.enums import AggregationPeriod, MetricType
-from app.models.metric import Metric
+from app.repositories.user_repository import UserRepository
+from app.services.mail_service import mail_service
+from app.core.security import (
+    verify_password,
+    create_access_token,
+    generate_6_digit_code,
+    get_password_hash
+)
+from app.core.exceptions import (
+    UserNotFoundException,
+    InvalidCredentialsException,
+    InvalidEmailException,
+    UserAlreadyExistsException,
+    EmailSendingException
+)
+from app.schemas.user import UserCreate, UserLogin, EmailVerification, ResendCode
+from app.schemas.token import Token
+
 
 class UserService:
-    def __init__(self, user_repo):
-        self.user_repo = user_repo
+    """Service for user authentication and management."""
+    
+    def __init__(self, db: Session):
+        self.db = db
+        self.user_repo = UserRepository(db)
 
-    def get(self, db: Session, id: str) -> User | None:
-        user = self.user_repo.get(db, id=id)
+    def authenticate_user(self, email: str, password: str) -> Tuple[Optional[User], bool]:
+        """
+        Authenticate user with email and password.
+        Returns tuple of (user, is_authenticated)
+        """
+        user = self.user_repo.get_user_by_email(email)
         if not user:
-            raise UserNotFoundException(user_id=id)
-        return user
-
-    def get_multi(
-        self, db: Session, *, skip: int = 0, limit: int = 100
-    ) -> List[User]:
-        return self.user_repo.get_multi(db, skip=skip, limit=limit)
-
-    def create_user(self, db: Session, *, user_in: UserCreate) -> User:
-        existing_user = self.get_by_email(db, email=user_in.email)
-        if existing_user:
-            raise UserAlreadyExistsException(email=user_in.email)
+            return None, False
         
-        hashed_password = get_password_hash(user_in.password)
-        verification_code = generate_6_digit_code()
+        if not verify_password(password, user.hashed_password):
+            return None, False
         
-        user_data = user_in.model_dump()
-        user_data["hashed_password"] = hashed_password
-        user_data["verification_code"] = verification_code
-        user_data["verification_code_expires_at"] = datetime.utcnow() + timedelta(hours=1)
-        del user_data["password"]
+        return user, True
 
-        user = self.user_repo.create(db, obj_in=user_data)
-        self.send_verification_email(user, verification_code)
-        return user
-
-    def update_user(
-        self, db: Session, *, db_obj: User, obj_in: UserUpdate | Dict[str, Any]
-    ) -> User:
-        if isinstance(obj_in, dict):
-            update_data = obj_in
-        else:
-            update_data = obj_in.model_dump(exclude_unset=True)
-
-        if "password" in update_data and update_data["password"]:
-            hashed_password = get_password_hash(update_data["password"])
-            update_data["hashed_password"] = hashed_password
-            del update_data["password"]
+    def login_user(self, login_data: UserLogin) -> Token:
+        """Login user and return JWT token."""
+        user, authenticated = self.authenticate_user(login_data.email, login_data.password)
         
-        return self.user_repo.update(db, db_obj=db_obj, obj_in=update_data)
-
-    def delete_user(self, db: Session, *, id: str) -> User | None:
-        user = self.user_repo.remove(db, id=id)
-        if not user:
-            raise UserNotFoundException(user_id=id)
-        return user
-
-    def get_by_email(self, db: Session, *, email: str) -> User | None:
-        return self.user_repo.get_by_email(db, email=email)
-
-    def send_verification_email(self, user: User, verification_code: str):
-        message = MIMEMultipart("alternative")
-        message["Subject"] = "Verify your email address"
-        message["From"] = settings.SMTP_USER
-        message["To"] = user.email
-
-        text = f"""\
-        Hi {user.name},
-        Thanks for signing up to our service.
-        Your verification code is: {verification_code}
-        """
-        html = f"""\
-        <html>
-          <body>
-            <p>Hi {user.name},<br>
-               Thanks for signing up to our service.<br>
-               Your verification code is: <b>{verification_code}</b>
-            </p>
-          </body>
-        </html>
-        """
-
-        part1 = MIMEText(text, "plain")
-        part2 = MIMEText(html, "html")
-
-        message.attach(part1)
-        message.attach(part2)
-
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.SMTP_SERVER, settings.SMTP_PORT, context=context) as server:
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(
-                settings.SMTP_USER, user.email, message.as_string()
-            )
-
-    def verify_email_with_code(self, db: Session, *, email: str, code: str) -> User | None:
-        user = self.get_by_email(db, email=email)
-        if (
-            not user
-            or not user.verification_code
-            or user.verification_code != code
-            or user.verification_code_expires_at < datetime.utcnow()
-        ):
-            raise InvalidCredentialsException(detail="Invalid or expired verification code.")
-
-        user.email_verified_at = datetime.utcnow()
-        user.verification_code = None
-        user.verification_code_expires_at = None
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        return user
-
-    def initiate_password_reset(self, db: Session, *, email: str):
-        user = self.get_by_email(db, email=email)
-        if not user:
-            raise UserNotFoundException()
-
-        password_reset_code = generate_6_digit_code()
-        user.password_reset_code = password_reset_code
-        user.password_reset_code_expires_at = datetime.utcnow() + timedelta(minutes=15)
-        db.add(user)
-        db.commit()
-        self.send_password_reset_email(user, password_reset_code)
-
-    def send_password_reset_email(self, user: User, password_reset_code: str):
-        message = MIMEMultipart("alternative")
-        message["Subject"] = "Reset your password"
-        message["From"] = settings.SMTP_USER
-        message["To"] = user.email
-
-        text = f"""\
-        Hi {user.name},
-        Your password reset code is: {password_reset_code}
-        """
-        html = f"""\
-        <html>
-          <body>
-            <p>Hi {user.name},<br>
-               Your password reset code is: <b>{password_reset_code}</b>
-            </p>
-          </body>
-        </html>
-        """
-
-        part1 = MIMEText(text, "plain")
-        part2 = MIMEText(html, "html")
-
-        message.attach(part1)
-        message.attach(part2)
-
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.SMTP_SERVER, settings.SMTP_PORT, context=context) as server:
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(
-                settings.SMTP_USER, user.email, message.as_string()
-            )
-
-    def reset_password_with_code(self, db: Session, *, email: str, code: str, new_password: str) -> User:
-        user = self.get_by_email(db, email=email)
-        if (
-            not user
-            or not user.password_reset_code
-            or user.password_reset_code != code
-            or user.password_reset_code_expires_at < datetime.utcnow()
-        ):
-            raise InvalidCredentialsException(detail="Invalid or expired password reset code.")
-
-        user.hashed_password = get_password_hash(new_password)
-        user.password_reset_code = None
-        user.password_reset_code_expires_at = None
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        return user
-
-    def get_metrics_summary(
-        self, db: Session, *, user_id: UUID, period: AggregationPeriod, metric_type: MetricType
-    ) -> List[Dict[str, Any]]:
-        return metric_repository.get_summary(
-            db,
-            user_id=user_id,
-            period=period.value,
-            metric_type=metric_type,
+        if not authenticated:
+            raise InvalidCredentialsException()
+        
+        if not user.email_verified_at:
+            raise InvalidEmailException()
+        
+        # Create access token
+        access_token = create_access_token(
+            subject=user.id,
+            expires_delta=timedelta(minutes=60)
         )
+        
+        return Token(access_token=access_token)
 
-    def get_metrics_by_type(
-        self, db: Session, *, user_id: UUID, metric_type: MetricType
-    ) -> List[Metric]:
-        return metric_repository.get_by_user_and_type(
-            db,
-            user_id=user_id,
-            metric_type=metric_type,
+    async def register_user(self, user_data: UserCreate) -> Tuple[User, str]:
+        """Register new user and return user with verification code."""
+        try:
+            user = self.user_repo.create_user(
+                name=user_data.name,
+                email=user_data.email,
+                password=user_data.password
+            )
+            
+            # Send verification email
+            email_sent = await mail_service.send_verification_email(
+                email=user.email,
+                verification_code=user.verification_code,
+                user_name=user.name
+            )
+            
+            if not email_sent:
+                raise EmailSendingException("Failed to send verification email")
+                
+            return user, user.verification_code
+        except UserAlreadyExistsException:
+            raise
+
+    def verify_email(self, verification_data: EmailVerification) -> bool:
+        """Verify user email with verification code."""
+        success = self.user_repo.verify_email(
+            email=verification_data.email,
+            verification_code=verification_data.verification_code
         )
+        
+        if not success:
+            raise InvalidCredentialsException("Invalid or expired verification code")
+        
+        return True
 
-user_service = UserService(user_repository)
+    async def resend_verification_code(self, resend_data: ResendCode) -> str:
+        """Resend verification code to user email."""
+        try:
+            user = self.user_repo.get_user_by_email(resend_data.email)
+            if not user:
+                # Don't reveal if user exists or not for security
+                return generate_6_digit_code()  # Return dummy code for security
+            
+            verification_code = self.user_repo.resend_verification_code(resend_data.email)
+            
+            # Send verification email
+            email_sent = await mail_service.send_verification_email(
+                email=user.email,
+                verification_code=verification_code,
+                user_name=user.name
+            )
+            
+            if not email_sent:
+                raise EmailSendingException("Failed to send verification email")
+                
+            return verification_code
+        except UserNotFoundException:
+            # Don't reveal if user exists or not for security
+            return generate_6_digit_code()  # Return dummy code for security
+
+    def get_user_by_id(self, user_id: str) -> Optional[User]:
+        """Get user by ID."""
+        return self.user_repo.get_user_by_id(user_id)
+
+    def get_user_by_email(self, email: str) -> Optional[User]:
+        """Get user by email."""
+        return self.user_repo.get_user_by_email(email)
+
+    def update_user_profile(self, user_id: str, name: Optional[str] = None, email: Optional[str] = None) -> User:
+        """Update user profile information."""
+        update_data = {}
+        if name is not None:
+            update_data['name'] = name
+        if email is not None:
+            # Check if email is already taken by another user
+            existing_user = self.user_repo.get_user_by_email(email)
+            if existing_user and existing_user.id != user_id:
+                raise UserAlreadyExistsException(email)
+            update_data['email'] = email
+            # If email changed, require re-verification
+            update_data['email_verified_at'] = None
+            update_data['verification_code'] = generate_6_digit_code()
+            update_data['verification_code_expires_at'] = datetime.now(timezone.utc) + timedelta(hours=24)
+
+        return self.user_repo.update_user(user_id, **update_data)
+
+    def change_password(self, user_id: str, current_password: str, new_password: str) -> bool:
+        """Change user password with current password verification."""
+        user = self.user_repo.get_user_by_id(user_id)
+        if not user:
+            raise UserNotFoundException(user_id)
+        
+        if not verify_password(current_password, user.hashed_password):
+            raise InvalidCredentialsException("Current password is incorrect")
+        
+        return self.user_repo.change_password(user_id, new_password)
+
+    async def initiate_password_reset(self, email: str) -> str:
+        """Initiate password reset process and return reset code."""
+        try:
+            user = self.user_repo.get_user_by_email(email)
+            if not user:
+                # Don't reveal if user exists or not for security
+                return generate_6_digit_code()  # Return dummy code for security
+            
+            reset_code = self.user_repo.set_password_reset_code(email)
+            
+            # Send password reset email
+            email_sent = await mail_service.send_password_reset_email(
+                email=user.email,
+                reset_code=reset_code,
+                user_name=user.name
+            )
+            
+            if not email_sent:
+                raise EmailSendingException("Failed to send password reset email")
+                
+            return reset_code
+        except UserNotFoundException:
+            # Don't reveal if user exists or not for security
+            return generate_6_digit_code()  # Return dummy code for security
+
+    def complete_password_reset(self, email: str, reset_code: str, new_password: str) -> bool:
+        """Complete password reset with reset code."""
+        success = self.user_repo.reset_password(email, reset_code, new_password)
+        
+        if not success:
+            raise InvalidCredentialsException("Invalid or expired reset code")
+        
+        return True
+
+    def is_email_verified(self, user_id: str) -> bool:
+        """Check if user's email is verified."""
+        user = self.user_repo.get_user_by_id(user_id)
+        if not user:
+            raise UserNotFoundException(user_id)
+        
+        return user.email_verified_at is not None
+
+    def get_user_token_data(self, user_id: str) -> dict:
+        """Get user data for token payload."""
+        user = self.user_repo.get_user_by_id(user_id)
+        if not user:
+            raise UserNotFoundException(user_id)
+        
+        return {
+            "user_id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "is_admin": user.is_admin,
+            "email_verified": user.email_verified_at is not None
+        }
+
+    def get_all_users(self, skip: int = 0, limit: int = 100) -> list[User]:
+        """Get all users with pagination."""
+        return self.user_repo.get_all_users(skip, limit)
+
+    def get_users_count(self) -> int:
+        """Get total count of active users."""
+        return self.user_repo.get_users_count()
+
+    def delete_user(self, user_id: str) -> bool:
+        """Soft delete user account."""
+        return self.user_repo.delete_user(user_id)

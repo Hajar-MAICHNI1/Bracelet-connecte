@@ -1,36 +1,97 @@
-from __future__ import annotations
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, Field, validator
 from typing import Optional, List
-import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.enums import MetricType
 
-# Shared properties
+
 class MetricBase(BaseModel):
-    metric_type: MetricType
-    value: Optional[float] = None
-    unit: Optional[str] = None
-    sensor_model: Optional[str] = None
-    timestamp: datetime
+    """Base schema for metric operations."""
+    metric_type: MetricType = Field(..., description="Type of metric measurement")
+    value: Optional[float] = Field(None, description="Measured value")
+    unit: str = Field(..., min_length=1, max_length=20, description="Unit of measurement")
+    sensor_model: str = Field(..., min_length=1, max_length=100, description="Sensor model identifier")
+    timestamp: Optional[datetime] = Field(None, description="Measurement timestamp")
+    user_id: Optional[str] = Field(None, min_length=36, max_length=36, description="User ID associated with the metric")
+
+    @validator('value')
+    def validate_value_range(cls, v):
+        """Validate value is within reasonable ranges based on metric type."""
+        if v is not None:
+            if v < 0:
+                raise ValueError('Metric value cannot be negative')
+        return v
+
+    @validator('timestamp')
+    def validate_timestamp(cls, v):
+        """Validate timestamp is not in the future."""
+        if v and v > datetime.now(timezone.utc):
+            raise ValueError('Timestamp cannot be in the future')
+        return v
 
 
-# Properties to receive via API on creation
 class MetricCreate(MetricBase):
-    device_id: uuid.UUID
-    user_id: uuid.UUID
-
-# Properties shared by models in DB
-class MetricInDBBase(MetricBase):
-    id: uuid.UUID
-    device_id: uuid.UUID
-    user_id: uuid.UUID
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-# Properties to return to client
-class Metric(MetricInDBBase):
+    """Schema for creating individual metrics."""
     pass
 
-class MetricBatch(BaseModel):
-    metrics: List[MetricBase]
+
+class MetricBatchCreate(BaseModel):
+    """Schema for batch metric creation."""
+    metrics: List[MetricCreate] = Field(..., min_items=1, max_items=1000, description="List of metrics to create")
+
+    @validator('metrics')
+    def validate_batch_size(cls, v):
+        """Validate batch size limits."""
+        if len(v) > 1000:
+            raise ValueError('Batch cannot exceed 1000 metrics')
+        return v
+
+
+class MetricResponse(BaseModel):
+    """Schema for API responses."""
+    id: str
+    metric_type: MetricType
+    value: Optional[float]
+    unit: str
+    sensor_model: str
+    timestamp: Optional[datetime]
+    user_id: str
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class MetricUpdate(BaseModel):
+    """Schema for updating metrics."""
+    metric_type: Optional[MetricType] = Field(None, description="Type of metric measurement")
+    value: Optional[float] = Field(None, description="Measured value")
+    unit: Optional[str] = Field(None, min_length=1, max_length=20, description="Unit of measurement")
+    sensor_model: Optional[str] = Field(None, min_length=1, max_length=100, description="Sensor model identifier")
+    timestamp: Optional[datetime] = Field(None, description="Measurement timestamp")
+
+    @validator('value')
+    def validate_value_range(cls, v):
+        """Validate value is within reasonable ranges based on metric type."""
+        if v is not None and v < 0:
+            raise ValueError('Metric value cannot be negative')
+        return v
+
+    @validator('timestamp')
+    def validate_timestamp(cls, v):
+        """Validate timestamp is not in the future."""
+        if v and v > datetime.now(timezone.utc):
+            raise ValueError('Timestamp cannot be in the future')
+        return v
+
+
+class MetricSummary(BaseModel):
+    """Schema for metric summary responses."""
+    metric_type: MetricType
+    count: int
+    average_value: Optional[float]
+    min_value: Optional[float]
+    max_value: Optional[float]
+    latest_timestamp: Optional[datetime]
+    unit: str

@@ -1,17 +1,17 @@
 from fastapi import HTTPException, status
 
 class UserNotFoundException(HTTPException):
-    def __init__(self, user_id: int):
+    def __init__(self, user_id: str):
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User with id {user_id} not found",
         )
 
 class InvalidCredentialsException(HTTPException):
-    def __init__(self):
+    def __init__(self, detail: str = "Invalid email or password"):
         super().__init__(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail=detail,
         )
 
 class InvalidEmailException(HTTPException):
@@ -61,4 +61,39 @@ class MetricNotFoundException(HTTPException):
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Metric with id {metric_id} not found",
+        )
+
+class EmailSendingException(HTTPException):
+    def __init__(self, detail: str = "Failed to send email"):
+        super().__init__(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=detail,
+        )
+
+class MetricValidationException(HTTPException):
+    def __init__(self, detail: str = "Metric validation failed"):
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=detail,
+        )
+
+class MetricRateLimitException(HTTPException):
+    def __init__(self, detail: str = "Rate limit exceeded for metric operations"):
+        super().__init__(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=detail,
+        )
+
+class MetricBatchSizeException(HTTPException):
+    def __init__(self, max_size: int = 1000):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Batch size exceeds maximum allowed size of {max_size} metrics",
+        )
+
+class MetricAccessDeniedException(HTTPException):
+    def __init__(self, detail: str = "Access denied to metric"):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
         )
