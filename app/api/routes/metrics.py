@@ -6,7 +6,7 @@ import logging
 from app.api.deps import get_current_user, get_db, get_current_admin_user
 from app.services.metric_service import MetricService
 from app.services.health_prediction_service import HealthPredictionService
-from app.schemas.metric import MetricBatchCreate, MetricResponse, MetricSummary
+from app.schemas.metric import MetricBatchCreate, MetricResponse, MetricSummary, DailyMetricsSummaryResponse
 from app.schemas.health_prediction import HealthPredictionResponse, HealthPredictionRequest
 from app.core.exceptions import (
     MetricCreationException,
@@ -233,6 +233,59 @@ async def get_health_prediction(
         )
 
 
+@router.get("/summary", response_model=DailyMetricsSummaryResponse)
+async def get_user_metrics_summary(
+    metric_type: Optional[MetricType] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> DailyMetricsSummaryResponse:
+    """
+    Get daily summary statistics for user metrics.
+    
+    This endpoint provides daily summary statistics (average value, count)
+    for the authenticated user's metrics with optional filtering.
+    Returns daily averages for each day within the specified date range.
+    
+    Args:
+        metric_type: Optional metric type filter
+        start_date: Optional start date filter (ISO format)
+        end_date: Optional end date filter (ISO format)
+        current_user: Authenticated user
+        db: Database session dependency
+        
+    Returns:
+        Daily metrics summary response containing daily averages
+        
+    Raises:
+        HTTPException: 401 if authentication fails
+        HTTPException: 500 if summary generation fails
+    """
+    try:
+        metric_service = MetricService(db)
+        
+        # Parse date strings to datetime objects
+        from datetime import datetime
+        start_dt = datetime.fromisoformat(start_date) if start_date else None
+        end_dt = datetime.fromisoformat(end_date) if end_date else None
+        
+        daily_summary = metric_service.get_daily_metrics_summary(
+            user_id=str(current_user.id),
+            metric_type=metric_type,
+            start_date=start_dt,
+            end_date=end_dt
+        )
+        
+        return DailyMetricsSummaryResponse(**daily_summary)
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while generating metrics summary"
+        )
+
+
 @router.get("/{metric_id}", response_model=MetricResponse)
 async def get_metric(
     metric_id: str,
@@ -315,56 +368,4 @@ async def delete_metric(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while deleting the metric"
-        )
-
-
-@router.get("/summary", response_model=MetricSummary)
-async def get_user_metrics_summary(
-    metric_type: Optional[MetricType] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-) -> MetricSummary:
-    """
-    Get summary statistics for user metrics.
-    
-    This endpoint provides summary statistics (count, average, min, max)
-    for the authenticated user's metrics with optional filtering.
-    
-    Args:
-        metric_type: Optional metric type filter
-        start_date: Optional start date filter (ISO format)
-        end_date: Optional end date filter (ISO format)
-        current_user: Authenticated user
-        db: Database session dependency
-        
-    Returns:
-        Metric summary statistics
-        
-    Raises:
-        HTTPException: 401 if authentication fails
-        HTTPException: 500 if summary generation fails
-    """
-    try:
-        metric_service = MetricService(db)
-        
-        # Parse date strings to datetime objects
-        from datetime import datetime
-        start_dt = datetime.fromisoformat(start_date) if start_date else None
-        end_dt = datetime.fromisoformat(end_date) if end_date else None
-        
-        summary = metric_service.get_metrics_summary(
-            user_id=str(current_user.id),
-            metric_type=metric_type,
-            start_date=start_dt,
-            end_date=end_dt
-        )
-        
-        return MetricSummary(**summary)
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while generating metrics summary"
         )

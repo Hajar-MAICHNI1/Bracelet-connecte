@@ -14,7 +14,7 @@
 # - Device endpoints use X-API-KEY header with device token
 
 @admin_token = 
-@access_token =eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjM5MDk5NDAsInN1YiI6IjlhYWVjMzRjLWVkMWYtNDNkNi05YTFmLTc4MTk5ZTA1NDIyNyIsImp0aSI6IjIyMTUzMDUwLTM3NDctNGI4Ny05ZTBmLTNmNWVlNTdmNGU1YiJ9.Fzm8Ee3bw4_sUv77qpsyI3XYh3fqyabeuES0nDxkAiA
+@access_token =eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjM5MjM5MzksInN1YiI6IjlhYWVjMzRjLWVkMWYtNDNkNi05YTFmLTc4MTk5ZTA1NDIyNyIsImp0aSI6IjZhZWMzYjE2LTM5NmMtNDA0OC05MTkxLTYyZDBkZWI2ZjgzZiJ9.TLNz3Txx4XdXDhU3h3EBw6AJRjpJ73h3EUMdDpCm0oY
 @device_token=5777a3ec-896d-45d2-a859-76b0bb9066a6
 
 ### Create Metrics Batch (User Authentication)
@@ -146,7 +146,7 @@ Authorization: Bearer {{access_token}}
 # - start_date: Start date for summary period (ISO format)
 # - end_date: End date for summary period (ISO format)
 # Response includes: count, average, min, max, standard deviation for each metric type
-GET http://localhost:8000/api/v1/metrics/summary?metric_type=heart_rate&start_date=2025-11-20T00:00:00Z&end_date=2025-11-22T23:59:59Z
+GET http://localhost:8000/api/v1/metrics/summary?metric_type=heart_rate&start_date=2025-11-20T00:00:00Z&end_date=2025-11-25T23:59:59Z
 Authorization: Bearer {{access_token}}
 
 # Example Response:

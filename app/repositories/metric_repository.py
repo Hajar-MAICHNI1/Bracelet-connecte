@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import datetime, timezone, date
+from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, func
 from app.models.metric import Metric
 from app.models.user import User
 from app.schemas.metric import MetricCreate, MetricUpdate
@@ -311,8 +311,8 @@ class MetricRepository:
         return query.count()
 
     def get_metrics_summary(
-        self, 
-        user_id: str, 
+        self,
+        user_id: str,
         metric_type: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
@@ -366,4 +366,86 @@ class MetricRepository:
             "max_value": max(values) if values else None,
             "latest_timestamp": max(timestamps) if timestamps else None,
             "unit": metrics[0].unit if metrics else None
+        }
+
+    def get_daily_metrics_summary(
+        self,
+        user_id: str,
+        metric_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """
+        Get daily summary statistics for user metrics.
+        
+        Args:
+            user_id: User ID to filter metrics by
+            metric_type: Optional metric type filter
+            start_date: Optional start date filter
+            end_date: Optional end date filter
+            
+        Returns:
+            Dictionary with daily summary statistics
+        """
+        # Base query for metrics with values
+        query = self.db.query(
+            func.date(Metric.timestamp).label('date'),
+            func.avg(Metric.value).label('average_value'),
+            func.count(Metric.id).label('count'),
+            Metric.metric_type,
+            Metric.unit
+        ).filter(
+            Metric.user_id == user_id,
+            Metric.deleted_at.is_(None),
+            Metric.value.isnot(None)
+        )
+        
+        # Apply filters
+        if metric_type:
+            query = query.filter(Metric.metric_type == metric_type)
+        
+        if start_date:
+            query = query.filter(Metric.timestamp >= start_date)
+        
+        if end_date:
+            query = query.filter(Metric.timestamp <= end_date)
+        
+        # Group by date, metric_type, and unit
+        query = query.group_by(
+            func.date(Metric.timestamp),
+            Metric.metric_type,
+            Metric.unit
+        ).order_by(func.date(Metric.timestamp))
+        
+        # Execute query
+        daily_summaries = query.all()
+        
+        # Convert to list of dictionaries
+        daily_summaries_list = []
+        for summary in daily_summaries:
+            daily_summaries_list.append({
+                "date": summary.date.isoformat(),
+                "average_value": float(summary.average_value) if summary.average_value else None,
+                "count": summary.count,
+                "metric_type": summary.metric_type,
+                "unit": summary.unit
+            })
+        
+        # Calculate total days in range and days with data
+        total_days = 0
+        days_with_data = len(daily_summaries_list)
+        
+        if start_date and end_date:
+            # Calculate total days in the date range
+            start_dt = start_date.date() if isinstance(start_date, datetime) else start_date
+            end_dt = end_date.date() if isinstance(end_date, datetime) else end_date
+            total_days = (end_dt - start_dt).days + 1
+        
+        return {
+            "daily_summaries": daily_summaries_list,
+            "metric_type": metric_type,
+            "start_date": start_date,
+            "end_date": end_date,
+            "total_days": total_days,
+            "days_with_data": days_with_data
         }

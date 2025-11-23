@@ -36,7 +36,7 @@ class MetricCreate(MetricBase):
 
 class MetricBatchCreate(BaseModel):
     """Schema for batch metric creation."""
-    metrics: List[MetricCreate] = Field(..., min_items=1, max_items=1000, description="List of metrics to create")
+    metrics: List[MetricCreate] = Field(..., min_length=1, max_length=1000, description="List of metrics to create")
 
     @validator('metrics')
     def validate_batch_size(cls, v):
@@ -95,3 +95,22 @@ class MetricSummary(BaseModel):
     max_value: Optional[float]
     latest_timestamp: Optional[datetime]
     unit: str
+
+
+class DailyMetricSummary(BaseModel):
+    """Schema for daily metric summary responses."""
+    date: str
+    average_value: Optional[float]
+    count: int
+    metric_type: MetricType
+    unit: str
+
+
+class DailyMetricsSummaryResponse(BaseModel):
+    """Schema for response containing multiple daily summaries."""
+    daily_summaries: List[DailyMetricSummary]
+    metric_type: MetricType
+    start_date: Optional[datetime]
+    end_date: Optional[datetime]
+    total_days: int
+    days_with_data: int

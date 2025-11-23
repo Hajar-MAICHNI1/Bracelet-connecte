@@ -21,7 +21,8 @@ from app.schemas.metric import (
     MetricBatchCreate,
     MetricResponse,
     MetricUpdate,
-    MetricSummary
+    MetricSummary,
+    DailyMetricsSummaryResponse
 )
 
 # Configure logging
@@ -431,8 +432,8 @@ class MetricService:
             raise
 
     def get_metrics_summary(
-        self, 
-        user_id: str, 
+        self,
+        user_id: str,
         metric_type: Optional[MetricType] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
@@ -462,6 +463,40 @@ class MetricService:
             
         except Exception as e:
             logger.error(f"Failed to get metrics summary for user {user_id}: {e}")
+            raise
+
+    def get_daily_metrics_summary(
+        self,
+        user_id: str,
+        metric_type: Optional[MetricType] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """
+        Get daily summary statistics for user metrics with business logic.
+        
+        Args:
+            user_id: User ID to get summary for
+            metric_type: Optional metric type filter
+            start_date: Optional start date filter
+            end_date: Optional end date filter
+            
+        Returns:
+            Dictionary with daily summary statistics
+        """
+        try:
+            daily_summary = self.metric_repo.get_daily_metrics_summary(
+                user_id=user_id,
+                metric_type=metric_type,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            logger.debug(f"Generated daily summary for user {user_id}, metric type {metric_type}")
+            return daily_summary
+            
+        except Exception as e:
+            logger.error(f"Failed to get daily metrics summary for user {user_id}: {e}")
             raise
 
     def get_user_metrics_count(
