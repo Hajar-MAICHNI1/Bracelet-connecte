@@ -12,6 +12,7 @@ class TokenPayload(BaseModel):
     """JWT payload structure."""
     sub: Optional[str] = None
     exp: Optional[int] = None
+    jti: Optional[str] = None
 
 
 class TokenData(BaseModel):

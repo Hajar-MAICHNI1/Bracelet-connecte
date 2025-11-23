@@ -7,9 +7,14 @@ Content-Type: application/json
 
 {
   "name": "Test User",
-  "email": "fazed37@gmail.com",
+  "email": "youssef.elaimari@gmail.com",
   "password": "TestPass123!"
 }
+
+###
+GET http://localhost:8000/api/v1/auth/me
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjM4OTk0NjQsInN1YiI6ImE3OWM1YzdlLTJhY2QtNDg2NS1hM2M4LTZjYTIyNTkwYzNiMSIsImp0aSI6IjU5YzA4ODJiLTc0NDEtNDg5NS04NDAxLTdmNmY5YzA4NzhiNSJ9.sevEaPNNAfpsRaReDMaj4p8mnj_ffe4TVyD6UXGtBHw
 
 ### Test 2: Verify email with verification code
 POST http://localhost:8000/api/v1/auth/verify-email
@@ -17,7 +22,7 @@ Content-Type: application/json
 
 {
   "email": "youssef.elaimari@gmail.com",
-  "verification_code": "920214"
+  "verification_code": "334806"
 }
 
 ### Test 3: Login with verified credentials
@@ -40,6 +45,7 @@ Content-Type: application/json
 ### Test 5: Logout
 POST http://localhost:8000/api/v1/auth/logout
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjM4OTk0NjQsInN1YiI6ImE3OWM1YzdlLTJhY2QtNDg2NS1hM2M4LTZjYTIyNTkwYzNiMSIsImp0aSI6IjU5YzA4ODJiLTc0NDEtNDg5NS04NDAxLTdmNmY5YzA4NzhiNSJ9.sevEaPNNAfpsRaReDMaj4p8mnj_ffe4TVyD6UXGtBHw
 
 ### Test 6: Register with duplicate email (should fail)
 POST http://localhost:8000/api/v1/auth/register

@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
+      POSTGRES_PASSWORD: 8iFu5uctoJfm6g
       POSTGRES_DB: mydb
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -27,14 +27,26 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
-      DATABASE_URL: postgresql://myuser:mypassword@postgres:5432/mydb
+      DATABASE_URL: postgresql://myuser:8iFu5uctoJfm6g@postgres:5432/mydb
     ports:
       - "8000:8000"
     volumes:
       - .:/app 
       - uv_cache:/app/.venv
 
+  redis:
+    image: redis:7-alpine
+    container_name: iot_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
 volumes:
   postgres_data:
   uv_cache:
+  redis_data:

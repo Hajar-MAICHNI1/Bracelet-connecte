@@ -14,7 +14,7 @@
 # - Device endpoints use X-API-KEY header with device token
 
 @admin_token = 
-@access_token =eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjM4MTA5MDgsInN1YiI6ImM0OTRiNGE0LTAyNjMtNGM2NS05MTM5LWUxYzllOWI2YWJkYyJ9.DUD7DxFtXhlaFooM_U-bwZ9OfToxmjVbqxAaJytUlH0
+@access_token =eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjM4OTgyMjMsInN1YiI6ImE3OWM1YzdlLTJhY2QtNDg2NS1hM2M4LTZjYTIyNTkwYzNiMSIsImp0aSI6IjBjYjcyMTcyLWVmYmQtNDk2NS1iMDRhLTdjZDZjMjY2NzNiMCJ9.6jngAJcJpyDoCrnNLFI5uvaVR-3dmyzvPOTIxG3JEAI
 @device_token=5777a3ec-896d-45d2-a859-76b0bb9066a6
 
 ### Create Metrics Batch (User Authentication)

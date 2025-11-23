@@ -75,7 +75,7 @@ async def create_metrics_batch(
     except MetricCreationException as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e) or "Failed to create metrics batch"
+            detail=str(e) or "Failed to create metrics batch" + str(e)
         )
     except UserNotFoundException as e:
         raise HTTPException(
@@ -105,7 +105,7 @@ async def create_metrics_batch(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while processing batch metrics"
+            detail="An error occurred while processing batch metrics" + str(e)
         )
 
 

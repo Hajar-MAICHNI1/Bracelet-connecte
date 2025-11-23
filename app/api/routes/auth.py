@@ -1,3 +1,7 @@
+from app.services.blacklist_service import blacklist_service
+from app.api.deps import security_scheme
+from fastapi.security.http import HTTPAuthorizationCredentials
+from app.api.deps import get_current_active_user
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any
@@ -61,6 +65,21 @@ async def login(
             detail="An error occurred during login"
         )
 
+@router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)
+async def read_current_user(
+    current_user = Depends(get_current_active_user)
+) -> UserResponse:
+    """
+    Get current authenticated user information.
+    
+    Args:
+        current_user: Current authenticated user dependency
+        
+    Returns:
+        UserResponse: Current user information
+    """
+    return UserResponse.model_validate(current_user)
+
 
 @router.post("/register", response_model=Dict[str, Any], status_code=status.HTTP_201_CREATED)
 async def register(
@@ -102,7 +121,7 @@ async def register(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred during registration"
+            detail="An error occurred during registration: " + str(e)
         )
 
 
@@ -195,7 +214,11 @@ async def resend_verification_code(
 
 
 @router.post("/logout", response_model=Dict[str, str], status_code=status.HTTP_200_OK)
-async def logout() -> Dict[str, str]:
+async def logout(
+    *,
+    current_user = Depends(get_current_active_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security_scheme)
+) -> Any:
     """
     Logout user (token invalidation).
     
@@ -207,6 +230,27 @@ async def logout() -> Dict[str, str]:
     Returns:
         Dict: Success message
     """
-    return {
-        "message": "Logged out successfully"
-    }
+
+    try:
+        token = credentials.credentials
+        
+        # Extract JTI from token
+        jti = blacklist_service.get_token_jti(token)
+        if not jti:
+            raise HTTPException(status_code=400, detail="Invalid token format")
+        
+        # Get token expiration time
+        expires_at = blacklist_service.get_token_expiration(token)
+        if not expires_at:
+            raise HTTPException(status_code=400, detail="Invalid token format")
+        
+        # Add token to blacklist
+        success = blacklist_service.add_to_blacklist(jti, expires_at)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to logout")
+        
+        return {"message": "Successfully logged out"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal server error during logout")

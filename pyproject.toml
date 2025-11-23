@@ -21,4 +21,5 @@ dependencies = [
   "joblib",
   "scikit-learn",
   "numpy",
+  "redis>=7.1.0",
 ]
