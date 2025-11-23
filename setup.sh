@@ -1,36 +1,31 @@
 #!/bin/bash
 set -e
 
+# Export the password as an environment variable so pg_isready can see it automatically.
+# We use single quotes '' to ensure the & symbol doesn't break Bash.
+export PGPASSWORD='Abdelhamid&62625'
+
 echo "Starting IoT Backend setup..."
 
-# 1. Export credentials safely from App Service Environment Variables
-# Azure App Service usually provides these if you set them in Configuration
-# We default to the values you provided ONLY if vars are missing (for safety)
-: "${DB_HOST:=braceletbd.postgres.database.azure.com}"
-: "${DB_USER:=admin_iotdb}"
-: "${DB_NAME:=postgres}" 
-# NOTE: We assume PGPASSWORD is set in Azure Env Vars. 
-# If not, the script might fail here.
-
-echo "Waiting for PostgreSQL to be ready at $DB_HOST..."
-
-# 2. Correct usage of pg_isready
-# We rely on PGPASSWORD env var being set for authentication
-until pg_isready -h "$DB_HOST" -p 5432 -U "$DB_USER" -d "$DB_NAME"; do
+# Wait for database to be ready
+# Note: We use -d for the database NAME (postgres), not the password.
+echo "Waiting for PostgreSQL to be ready..."
+until pg_isready -h braceletbd.postgres.database.azure.com -p 5432 -U "admin_iotdb" -d "postgres"; do
   echo "PostgreSQL is unavailable - sleeping 5s"
   sleep 5
 done
 
 echo "PostgreSQL is up and running!"
 
-# 3. Run migrations
+# Run database migrations
 echo "Running database migrations..."
-# Ensure the connection string uses the URL-encoded password if strictly necessary
-# But better to rely on DATABASE_URL env var
+# Ideally, rely on the DATABASE_URL env var set in Azure, but if you must hardcode:
+# export DATABASE_URL="postgresql://admin_iotdb:Abdelhamid%2662625@braceletbd.postgres.database.azure.com:5432/postgres"
 uv run alembic upgrade head
 
 echo "Database migrations completed successfully!"
 
-# 4. Start the application
+# Start the application
 echo "Starting FastAPI application..."
-exec "$@"
+# Ensure we bind to 0.0.0.0 for Azure
+exec uvicorn main:app --host 0.0.0.0 --port 8000
