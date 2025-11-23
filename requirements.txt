@@ -11,3 +11,6 @@ python-multipart
 alembic>=1.17.1
 itsdangerous
 fastapi-mail
+joblib
+scikit-learn
+numpy
