@@ -83,8 +83,8 @@ class MetricRepository:
             # Validate user exists
             self._validate_user_exists(user_id)
             
-            # Prepare metrics for bulk insertion
-            metrics = []
+            # Use individual inserts to get proper object persistence
+            created_metrics = []
             for metric_data in metrics_data:
                 metric = Metric(
                     metric_type=metric_data.metric_type,
@@ -94,17 +94,16 @@ class MetricRepository:
                     timestamp=metric_data.timestamp or datetime.now(timezone.utc),
                     user_id=user_id
                 )
-                metrics.append(metric)
+                self.db.add(metric)
+                created_metrics.append(metric)
             
-            # Bulk insert
-            self.db.bulk_save_objects(metrics)
             self.db.commit()
             
-            # Refresh to get IDs and timestamps
-            for metric in metrics:
+            # Refresh all metrics to get IDs and timestamps
+            for metric in created_metrics:
                 self.db.refresh(metric)
             
-            return metrics
+            return created_metrics
             
         except (UserNotFoundException, MetricCreationException):
             # Re-raise specific exceptions to preserve error information

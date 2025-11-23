@@ -14,11 +14,14 @@ class HealthRiskLevel(str, Enum):
 class HealthPredictionRequest(BaseModel):
     """Schema for health prediction requests."""
     user_id: str = Field(..., description="User ID for prediction")
+    spo2: Optional[float] = Field(None, ge=0.0, le=100.0, description="SpO2 value in percentage")
+    heart_rate: Optional[float] = Field(None, ge=0.0, description="Heart rate in beats per minute")
+    body_temperature: Optional[float] = Field(None, ge=0.0, description="Body temperature in Celsius")
     include_metrics: bool = Field(False, description="Include raw metrics in response")
     prediction_horizon_hours: Optional[int] = Field(
-        24, 
-        ge=1, 
-        le=168, 
+        24,
+        ge=1,
+        le=168,
         description="Prediction horizon in hours (1-168)"
     )
 
@@ -37,7 +40,7 @@ class HealthPredictionResponse(BaseModel):
     """Schema for health prediction responses."""
     user_id: str = Field(..., description="User ID")
     prediction_timestamp: datetime = Field(..., description="When prediction was made")
-    overall_health_score: float = Field(..., ge=0.0, le=1.0, description="Overall health score (0-1)")
+    prediction_result: int = Field(..., ge=0, le=2, description="Prediction result: 0=normal, 1=sick, 2=life-threatening")
     health_risk_level: HealthRiskLevel = Field(..., description="Overall health risk level")
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Prediction confidence (0-1)")
     

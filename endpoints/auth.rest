@@ -22,7 +22,7 @@ Content-Type: application/json
 
 {
   "email": "youssef.elaimari@gmail.com",
-  "verification_code": "334806"
+  "verification_code": "728547"
 }
 
 ### Test 3: Login with verified credentials

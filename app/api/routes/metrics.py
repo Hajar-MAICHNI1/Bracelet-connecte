@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
+import logging
 
 from app.api.deps import get_current_user, get_db, get_current_admin_user
 from app.services.metric_service import MetricService
@@ -19,6 +20,9 @@ from app.core.exceptions import (
 )
 from app.models.user import User
 from app.models.enums import MetricType
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -103,9 +107,13 @@ async def create_metrics_batch(
             detail=str(e) or "Batch size too large"
         )
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Batch metrics creation failed: {str(e)}")
+        logger.error(f"Traceback: {error_details}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while processing batch metrics" + str(e)
+            detail=f"An error occurred while processing batch metrics: {str(e)}"
         )
 
 
@@ -167,6 +175,63 @@ async def get_metrics(
             detail="An error occurred while retrieving metrics"
         )
 
+@router.get("/health-prediction", response_model=HealthPredictionResponse)
+async def get_health_prediction(
+    include_metrics: bool = False,
+    prediction_horizon_hours: Optional[int] = 24,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> HealthPredictionResponse:
+    """
+    Get health prediction based on last 24 hours of metrics.
+    
+    This endpoint provides a comprehensive health assessment based on the user's
+    metrics data from the last 24 hours, including:
+    - Overall health score (0-1)
+    - Health risk level (LOW, MEDIUM, HIGH)
+    - Confidence score
+    - Individual metric analysis
+    - Risk factors and recommendations
+    
+    Args:
+        include_metrics: Include raw metrics summary in response
+        prediction_horizon_hours: Prediction horizon in hours (1-168, default: 24)
+        current_user: Authenticated user
+        db: Database session dependency
+        
+    Returns:
+        Health prediction response with comprehensive analysis
+        
+    Raises:
+        HTTPException: 401 if authentication fails
+        HTTPException: 500 if prediction generation fails
+    """
+    try:
+        health_prediction_service = HealthPredictionService(db)
+        
+        # Create prediction request
+        request = HealthPredictionRequest(
+            user_id=str(current_user.id),
+            include_metrics=include_metrics,
+            prediction_horizon_hours=prediction_horizon_hours
+        )
+        
+        # Get health prediction
+        prediction = health_prediction_service.predict_health_status(request)
+        
+        return prediction
+        
+    except UserNotFoundException as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while generating health prediction"
+        )
+
 
 @router.get("/{metric_id}", response_model=MetricResponse)
 async def get_metric(
@@ -213,6 +278,7 @@ async def get_metric(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while retrieving the metric"
         )
+
 
 
 @router.delete("/{metric_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -301,62 +367,4 @@ async def get_user_metrics_summary(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while generating metrics summary"
-        )
-
-
-@router.get("/health-prediction", response_model=HealthPredictionResponse)
-async def get_health_prediction(
-    include_metrics: bool = False,
-    prediction_horizon_hours: Optional[int] = 24,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-) -> HealthPredictionResponse:
-    """
-    Get health prediction based on last 24 hours of metrics.
-    
-    This endpoint provides a comprehensive health assessment based on the user's
-    metrics data from the last 24 hours, including:
-    - Overall health score (0-1)
-    - Health risk level (LOW, MEDIUM, HIGH)
-    - Confidence score
-    - Individual metric analysis
-    - Risk factors and recommendations
-    
-    Args:
-        include_metrics: Include raw metrics summary in response
-        prediction_horizon_hours: Prediction horizon in hours (1-168, default: 24)
-        current_user: Authenticated user
-        db: Database session dependency
-        
-    Returns:
-        Health prediction response with comprehensive analysis
-        
-    Raises:
-        HTTPException: 401 if authentication fails
-        HTTPException: 500 if prediction generation fails
-    """
-    try:
-        health_prediction_service = HealthPredictionService(db)
-        
-        # Create prediction request
-        request = HealthPredictionRequest(
-            user_id=str(current_user.id),
-            include_metrics=include_metrics,
-            prediction_horizon_hours=prediction_horizon_hours
-        )
-        
-        # Get health prediction
-        prediction = health_prediction_service.predict_health_status(request)
-        
-        return prediction
-        
-    except UserNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while generating health prediction"
         )

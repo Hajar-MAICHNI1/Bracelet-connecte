@@ -218,7 +218,7 @@ class MetricService:
             
             if not valid_metrics:
                 logger.error(f"No valid metrics in batch for user {user_id}")
-                raise MetricCreationException("No valid metrics in batch")
+                raise MetricCreationException()
             
             # Create valid metrics via repository
             created_metrics = self.metric_repo.create_metrics_batch(user_id, valid_metrics)
@@ -247,10 +247,13 @@ class MetricService:
             return result
             
         except Exception as e:
-            logger.error(f"Batch creation failed for user {user_id}: {e}")
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"Batch creation failed for user {user_id}: {str(e)}")
+            logger.error(f"Traceback: {error_details}")
             if isinstance(e, (MetricCreationException, UserNotFoundException, MetricValidationException)):
                 raise
-            raise MetricCreationException() from e
+            raise e
 
     def get_user_metrics(
         self, 
@@ -293,7 +296,7 @@ class MetricService:
                 return metrics
 
             metrics = self.metric_repo.get_user_metrics(
-                user_id=user.id,
+                user_id=str(user.id),
                 metric_type=metric_type,
                 start_date=start_date,
                 end_date=end_date,
@@ -307,7 +310,7 @@ class MetricService:
         except UserNotFoundException:
             raise
         except Exception as e:
-            logger.error(f"Failed to get metrics for user {user_id}: {e}")
+            logger.error(f"Failed to get metrics for user {user.id}: {e}")
             raise
 
     def get_metric(self, metric_id: str, user_id: Optional[str] = None) -> Metric:
@@ -328,7 +331,7 @@ class MetricService:
         try:
             metric = self.metric_repo.get_metric_by_id(metric_id, user_id)
             
-            if user_id and metric.user_id != user_id:
+            if user_id and metric and metric.user_id != user_id:
                 raise InvalidCredentialsException("User does not have access to this metric")
             
             return metric
@@ -368,7 +371,7 @@ class MetricService:
                 )
             elif 'value' in update_fields:
                 self._validate_metric_value(
-                    existing_metric.metric_type, update_fields['value']
+                    MetricType(existing_metric.metric_type), update_fields['value']
                 )
             elif 'metric_type' in update_fields:
                 self._validate_metric_value(
@@ -377,7 +380,7 @@ class MetricService:
             
             if 'timestamp' in update_fields and update_fields['timestamp']:
                 self._validate_timestamp_uniqueness(
-                    existing_metric.user_id, update_fields['timestamp'], 
+                    str(existing_metric.user_id), update_fields['timestamp'],
                     update_fields.get('metric_type', existing_metric.metric_type)
                 )
             
