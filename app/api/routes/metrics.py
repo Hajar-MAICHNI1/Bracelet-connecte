@@ -233,7 +233,75 @@ async def get_health_prediction(
         )
 
 
-@router.get("/summary", response_model=DailyMetricsSummaryResponse)
+@router.get("/summary", response_model=Dict[str, Any])
+async def get_metrics_summary(
+    metric_type: Optional[MetricType] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Get aggregated metrics summary with statistics.
+    
+    This endpoint provides aggregated summary statistics (count, average, min, max)
+    for the authenticated user's metrics with optional filtering by metric type
+    and date range.
+    
+    Args:
+        metric_type: Optional metric type filter (spo2, heart_rate, skin_temperature, steps, sleep)
+        start_date: Optional start date filter (ISO format)
+        end_date: Optional end date filter (ISO format)
+        current_user: Authenticated user
+        db: Database session dependency
+        
+    Returns:
+        Dictionary with aggregated summary statistics for the specified metric type
+        
+    Raises:
+        HTTPException: 401 if authentication fails
+        HTTPException: 500 if summary generation fails
+    """
+    try:
+        metric_service = MetricService(db)
+        
+        # Parse date strings to datetime objects
+        from datetime import datetime
+        start_dt = datetime.fromisoformat(start_date) if start_date else None
+        end_dt = datetime.fromisoformat(end_date) if end_date else None
+        
+        summary = metric_service.get_metrics_summary(
+            user_id=str(current_user.id),
+            metric_type=metric_type,
+            start_date=start_dt,
+            end_date=end_dt
+        )
+        
+        # Format the response to match frontend expectations
+        if metric_type:
+            # Single metric type requested
+            return {
+                metric_type.value: {
+                    "count": summary.get("count", 0),
+                    "average": summary.get("average_value"),
+                    "min": summary.get("min_value"),
+                    "max": summary.get("max_value"),
+                    "std_dev": None  # Standard deviation not currently calculated
+                }
+            }
+        else:
+            # No specific metric type - return empty summary
+            return {}
+        
+    except Exception as e:
+        logger.error(f"Error generating metrics summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while generating metrics summary"
+        )
+
+
+@router.get("/summary/daily", response_model=DailyMetricsSummaryResponse)
 async def get_user_metrics_summary(
     metric_type: Optional[MetricType] = None,
     start_date: Optional[str] = None,
