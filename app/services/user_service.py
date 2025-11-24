@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
@@ -37,7 +37,7 @@ class UserService:
         if not user:
             return None, False
         
-        if not verify_password(password, user.hashed_password):
+        if not verify_password(password, str(user.hashed_password)):
             return None, False
         
         return user, True
@@ -46,16 +46,16 @@ class UserService:
         """Login user and return JWT token."""
         user, authenticated = self.authenticate_user(login_data.email, login_data.password)
         
-        if not authenticated:
+        if not authenticated or not user:
             raise InvalidCredentialsException()
         
         if not user.email_verified_at:
             raise InvalidEmailException()
         
-        # Create access token
+        # Create access token with longer expiration (7 days for better user experience)
         access_token = create_access_token(
-            subject=user.id,
-            expires_delta=timedelta(minutes=60)
+            subject=str(user.id),
+            expires_delta=timedelta(days=7)
         )
         
         return Token(access_token=access_token)
@@ -71,15 +71,15 @@ class UserService:
             
             # Send verification email
             email_sent = await mail_service.send_verification_email(
-                email=user.email,
-                verification_code=user.verification_code,
-                user_name=user.name
+                email=str(user.email),
+                verification_code=str(user.verification_code),
+                user_name=str(user.name)
             )
             
             if not email_sent:
                 raise EmailSendingException("Failed to send verification email")
                 
-            return user, user.verification_code
+            return user, str(user.verification_code)
         except UserAlreadyExistsException:
             raise
 
@@ -107,9 +107,9 @@ class UserService:
             
             # Send verification email
             email_sent = await mail_service.send_verification_email(
-                email=user.email,
+                email=str(user.email),
                 verification_code=verification_code,
-                user_name=user.name
+                user_name=str(user.name)
             )
             
             if not email_sent:
@@ -130,13 +130,13 @@ class UserService:
 
     def update_user_profile(self, user_id: str, name: Optional[str] = None, email: Optional[str] = None) -> User:
         """Update user profile information."""
-        update_data = {}
+        update_data: dict[str, Any] = {}
         if name is not None:
             update_data['name'] = name
         if email is not None:
             # Check if email is already taken by another user
             existing_user = self.user_repo.get_user_by_email(email)
-            if existing_user and existing_user.id != user_id:
+            if existing_user and str(existing_user.id) != user_id:
                 raise UserAlreadyExistsException(email)
             update_data['email'] = email
             # If email changed, require re-verification
@@ -152,7 +152,7 @@ class UserService:
         if not user:
             raise UserNotFoundException(user_id)
         
-        if not verify_password(current_password, user.hashed_password):
+        if not verify_password(current_password, str(user.hashed_password)):
             raise InvalidCredentialsException("Current password is incorrect")
         
         return self.user_repo.change_password(user_id, new_password)
@@ -169,9 +169,9 @@ class UserService:
             
             # Send password reset email
             email_sent = await mail_service.send_password_reset_email(
-                email=user.email,
+                email=str(user.email),
                 reset_code=reset_code,
-                user_name=user.name
+                user_name=str(user.name)
             )
             
             if not email_sent:
