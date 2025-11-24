@@ -1,3 +1,5 @@
+from app.core.database import engine
+from app.models.base import Base
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,6 +19,12 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+@app.on_event("startup")
+def create_db_tables():
+    print("Creating database tables (if they don't exist)...")
+    Base.metadata.create_all(bind=engine, checkfirst=True)
+    print("Tables created successfully.")
 
 # Include authentication router
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
