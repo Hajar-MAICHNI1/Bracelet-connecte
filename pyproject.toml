@@ -22,4 +22,5 @@ dependencies = [
   "scikit-learn",
   "numpy",
   "redis>=7.1.0",
+  "httpx>=0.28.1",
 ]

@@ -333,7 +333,6 @@ async def get_metric(
         )
 
 
-
 @router.delete("/{metric_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_metric(
     metric_id: str,
